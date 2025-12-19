@@ -1,23 +1,24 @@
-# Anharmonic Portfolio Optimization: The FIRE Engine
+# Anharmonic Portfolio Optimization: The FIRE2 Engine
 
-This project applies the FIRE (Fast Inertial Relaxation Engine) algorithm—conventionally used in computational physics for atomic structure relaxation—to the problem of non-convex portfolio optimization.
-Standard solvers (like SLSQP) often struggle with the "rugged" error landscapes created by heavy-tailed market data. I built a custom engine that combines inertial dynamics with an Aggressive Augmented Lagrangian method. This allows the solver to escape local minima while strictly enforcing portfolio constraints, offering a robust alternative to traditional gradient-based methods.
+This project applies the FIRE2 (Fast Inertial Relaxation Engine 2) algorithm—conventionally used in computational physics for atomic structure relaxation—to the problem of non-convex portfolio optimization.
+Standard solvers (like SLSQP) often struggle with the "rugged" error landscapes created by heavy-tailed market data. I built a custom engine that combines inertial dynamics with an Aggressive Augmented Lagrangian method. This allows the solver to escape local minima while strictly enforcing portfolio constraints, offering a better alternative to traditional gradient-based methods.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![Numba](https://img.shields.io/badge/HPC-Numba-green)
 
-## 1. Background & Motivation
-During my PhD in Computational Biophysics, I built elastic models to simulate biological membranes. These systems minimize complex bending energy functionals, resulting in rugged landscapes filled with metastable states (local minima).
-I noticed a direct mathematical parallel between this and quantitative risk management:
-
-* Membranes minimize elastic energy subject to geometric constraints.
-* Portfolios minimize Tail Risk (mVaR) subject to capital constraints.
-
-This project ports the relaxation algorithms I used for biophysics directly into a financial context, testing whether molecular dynamics tools can outperform standard financial solvers on their own turf.
-
-## 2. The Core Problem
+## 1. The Core Problem
 Modern Portfolio Theory often assumes Gaussian returns, making risk minimization a simple convex problem (Variance). However, real markets exhibit Skewness and Kurtosis.
 When optimizing for Modified Value-at-Risk (mVaR) using the Cornish-Fisher expansion, the objective function includes cubic and quartic terms. This creates a non-convex surface where greedy solvers like `scipy.optimize.SLSQP` frequently get trapped in suboptimal local minima.
+
+## 2. Background & Motivation
+During my PhD in Computational Biophysics, I built continuum elastic models to simulate biological membranes. These systems find equilibrium by minimizing complex bending energy functionals, resulting sometimes in rugged landscapes.
+
+I noticed a direct mathematical parallel between this physics problem and quantitative risk management:
+
+* Membrane Physics: Minimizes Elastic Energy subject to Geometric Constraints (e.g., fixed area or volume).
+* Portfolio Optimization: Minimize Modified Value-at-Risk (mVaR) subject to Constraints (e.g., capital allocation).
+  
+This project ports the relaxation algorithms I used for biophysics directly into a financial context, testing whether molecular dynamics tools can outperform standard financial solvers on their own turf.
 
 ## 3. Technical Architecture
 
@@ -32,23 +33,15 @@ Since FIRE is an unconstrained optimization method, I wrap it in a custom Augmen
 
 * Unity Constraint: $\sum w_i = 1$
 * (optional) Long-only Constraint: $w_i \ge 0$
-* Risk Constraint (Modified VaR via Cornish-Fisher):
-  $$mVaR_\alpha(w) = - \left( \mu_p + \sigma_p \left[ z_\alpha + \frac{1}{6}(z_\alpha^2 - 1)S_p + \frac{1}{24}(z_\alpha^3 - 3z_\alpha)(K - 3) - \frac{1}{36}(2z_\alpha^3 - 5z_\alpha)S_p^2 \right] \right)$$
-
-  **Where:**
-    * $\mu_p, \sigma_p$ -  Portfolio mean and volatility.
-    * $z_\alpha$ - Critical value from the normal distribution for confidence $\alpha$.
-    * $S_p$ - Skewness
-    * $K$ - Kurtosis
 
 **Why "Aggressive"?**
-Standard Lagrangians increase penalties slowly. I implemented a schedule that reduces the penalty parameters (ρ) while rumping up Lagrange multipliers (λ) when constraint violation stalls or switches direction. This forces the inertial engine to "crash" into the valid region quickly, prioritizing feasibility without losing the kinetic energy needed to find a decent optima.
+Standard methods slowly ramp up penalties. I start with high stiffness to force immediate feasibility ("crash" into the valid region), then relax the penalty parameter (ρ) while refining Lagrange multipliers (λ). I relax the penalty stiffness to stop the solver from wasting time ping-pong between tight constraint walls, allowing it to flow smoothly along the valid path toward the optimum.
 
 ### C. Performance (Numba)
 To make this computationally viable, I avoided Python loops entirely.
 
 * **JIT Compilation:** All numerical routines are compiled using `numba.jit(nopython=True)`.
-* **Tensor Calculus:** The $O(N^3)$ Skewness and $O(N^4)$ Kurtosis tensor contractions are parallelized, achieving performance comparable to C++.
+* **Tensor Calculus:** The $O(N^3)$ Skewness and $O(N^4)$ Kurtosis tensor contractions are parallelized, achieving great performance.
 
 ## 4. Benchmarking Strategy
 TBA
