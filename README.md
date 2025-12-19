@@ -40,8 +40,9 @@ Since FIRE is an unconstrained optimization method, I wrap it in a custom Augmen
     * $z_\alpha$ - Critical value from the normal distribution for confidence $\alpha$.
     * $S_p$ - Skewness
     * $K$ - Kurtosis
+
 **Why "Aggressive"?**
-Standard Lagrangians increase penalties slowly. I implemented a schedule that rapidly ramps up the penalty parameters (ρ) and Lagrange multipliers (λ) when constraint violation stalls. This forces the inertial engine to "crash" into the valid region quickly, prioritizing feasibility without losing the kinetic energy needed to find global optima.
+Standard Lagrangians increase penalties slowly. I implemented a schedule that reduces the penalty parameters (ρ) while rumping up Lagrange multipliers (λ) when constraint violation stalls or switches direction. This forces the inertial engine to "crash" into the valid region quickly, prioritizing feasibility without losing the kinetic energy needed to find a decent optima.
 
 ### C. Performance (Numba)
 To make this computationally viable, I avoided Python loops entirely.
