@@ -72,7 +72,7 @@ returns, _, _ = generate_nasty_data(n_assets=50, nu=3.0)
 solver = FireOptimizer(returns)
 
 # 3. Optimize for 99% mVaR
-weights = solver.optimize(target='mVaR', confidence=0.99)
+weights = solver.optimize(confidence=0.99)
 ```
 
 ## 6. Disclaimer
