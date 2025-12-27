@@ -52,8 +52,8 @@ Run the following commands in a terminal:
 
 ```bash
 # Clone the repository
-git clone [https://github.com/yourusername/anharmonic-portfolio.git](https://github.com/yourusername/anharmonic-portfolio.git)
-cd anharmonic-portfolio
+git clone git@github.com:infinityScha/inertial-risk-optimizer.git
+cd inertial-risk-optimizer
 
 # Install dependencies
 pip install -r requirements.txt
