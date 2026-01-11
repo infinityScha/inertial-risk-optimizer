@@ -216,3 +216,105 @@ def compute_flat_moments_gradients(w, m1_flat, m2_flat, m3_flat, m4_flat):
                     idx4 += 1
 
     return grad_m1_flat, grad_m2_flat, grad_m3_flat, grad_m4_flat
+
+
+@nb.njit(fastmath=True)
+def compute_portfolio_mean(w, m1_flat):
+    """
+    Computes the mean of the portfolio.
+    Input: w (N), m1_flat (N)
+    Output: mu_p (float)
+    """
+    mu_p = np.dot(w, m1_flat)
+    return mu_p
+
+
+@nb.njit(fastmath=True)
+def compute_portfolio_variance(w, m2_flat):
+    """
+    Computes the variance of the portfolio.
+    Input: w (N), m2_flat (N*(N+1)/2)
+    Output: sigma2_p (float)
+    """
+    sigma2_p = 0.0
+    idx2 = 0
+    N = w.shape[0]
+    for i in range(N):
+        wi = w[i]
+        for j in range(i, N):
+            mij = m2_flat[idx2]
+            sigma2_p += wi * w[j] * mij
+            idx2 += 1
+    return sigma2_p
+
+
+@nb.njit(fastmath=True)
+def compute_portfolio_skewness(w, m3_flat, sigma_p):
+    """
+    Computes the skewness of the portfolio.
+    Input: w (N), m3_flat (N*(N+1)*(N+2)/6), sigma_p (float)
+    Output: skew_p (float)
+    """
+    skew_p = 0.0
+    idx3 = 0
+    N = w.shape[0]
+    for i in range(N):
+        wi = w[i]
+        for j in range(i, N):
+            wj = w[j]
+            for k in range(j, N):
+                mijk = m3_flat[idx3]
+                skew_p += wi * wj * w[k] * mijk
+                idx3 += 1
+    skew_p /= sigma_p**3
+    return skew_p
+
+
+@nb.njit(fastmath=True)
+def compute_portfolio_kurtosis(w, m4_flat, sigma_p):
+    """
+    Computes the kurtosis of the portfolio.
+    Input: w (N), m4_flat (N*(N+1)*(N+2)*(N+3)/24), sigma_p (float)
+    Output: kurt_p (float)
+    """
+    kurt_p = 0.0
+    idx4 = 0
+    N = w.shape[0]
+    for i in range(N):
+        wi = w[i]
+        for j in range(i, N):
+            wj = w[j]
+            for k in range(j, N):
+                wk = w[k]
+                for l in range(k, N):
+                    mijkl = m4_flat[idx4]
+                    kurt_p += wi * wj * wk * w[l] * mijkl
+                    idx4 += 1
+    kurt_p /= sigma_p**4
+    return kurt_p
+
+
+@nb.njit(fastmath=True)
+def compute_modified_VaR(w, m1_flat, m2_flat, m3_flat, m4_flat, z_alpha):
+    """
+    Computes the modified VaR of the portfolio using the centralized moments.
+    Input: w (N), m1_flat (N), m2_flat (N*(N+1)/2), m3_flat (N*(N+1)*(N+2)/6), m4_flat (N*(N+1)*(N+2)*(N+3)/24), z_alpha (float)
+    Output: modified_VaR (float)
+    """
+    
+    # compute portfolio mean, variance, skewness, kurtosis
+    mu_p = compute_portfolio_mean(w, m1_flat)
+    sigma2_p = compute_portfolio_variance(w, m2_flat)
+    sigma_p = np.sqrt(sigma2_p)
+    skew_p = compute_portfolio_skewness(w, m3_flat, sigma_p)
+    kurt_p = compute_portfolio_kurtosis(w, m4_flat, sigma_p)
+
+    # Modified VaR calculation
+    z_mod = (z_alpha +
+             (1/6) * (z_alpha**2 - 1) * skew_p +
+             (1/24) * (z_alpha**3 - 3*z_alpha) * (kurt_p - 3) -
+             (1/36) * (2*z_alpha**3 - 5*z_alpha) * skew_p**2)
+    
+    modified_VaR = -(mu_p + z_mod * sigma_p)
+
+    return modified_VaR
