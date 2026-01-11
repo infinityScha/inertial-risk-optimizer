@@ -1,5 +1,6 @@
 import numpy as np
 import numba as nb
+from numba import prange
 
 @nb.njit
 def get_multiplicity_2(n):
@@ -55,9 +56,9 @@ def get_multiplicity_4(n):
 @nb.njit
 def compute_flat_moments(returns):
     """
-    Computes the mean vector, covariance matrix, co-skewness tensor, and co-kurtosis tensor DIRECTLY into flattened arrays.
+    Computes the centralized moments (except the first moment) DIRECTLY into flattened arrays.
     Input: returns (T x N)
-    Output: m1_flat (N,), m2_flat (N*(N+1)/2,), m3_flat (N*(N+1)*(N+2)/6,), m4_flat (N*(N+1)*(N+2)*(N+3)/24,)
+    Output: m1_flat (N), m2_flat (N*(N+1)/2), m3_flat (N*(N+1)*(N+2)/6), m4_flat (N*(N+1)*(N+2)*(N+3)/24)
     """
     T, N = returns.shape
     
@@ -72,7 +73,8 @@ def compute_flat_moments(returns):
     m4_flat = np.zeros(size4, dtype=np.float64)
     
     # Pre-calculate normalization factor (1/T), could use unbiased versions but for large T this is negligible 
-    # also, with 1/T we obtain maximum likelihood estimators which is theoretically easier to work with
+    # also, with 1/T we obtain maximum likelihood estimators which are theoretically "well behaved" so when we use them 
+    # in further calculations (e.g., portfolio optimization) they will be easier to handle and interpret.
     if T < 1:
         raise ValueError("There should be at least one time step to compute moments.")
     
@@ -84,30 +86,36 @@ def compute_flat_moments(returns):
         val = np.sum(col_i)  # sum over time dimension
         m1_flat[i] = val * inv_T
 
+
+    # centralize the returns for higher moments
+    centralized_returns = returns.copy()
+    for i in range(N):
+        centralized_returns[:, i] -= m1_flat[i]
+
     # Covariance loop
     idx2 = 0
     for i in range(N):
-        col_i = returns[:, i]
+        col_i = centralized_returns[:, i]
         for j in range(i, N):
-            col_j = returns[:, j]
+            col_j = centralized_returns[:, j]
             # Sum over time dimension (The contraction)
             # sum(r_it * r_jt)
             val = np.dot(col_i, col_j)
             m2_flat[idx2] = val * inv_T
             idx2 += 1
 
-    # TODO: validate that the skewness and kurtosis calculations are correct, specifically that they represent the access values and normalized correctly to the variances if needed
+    # TODO: validate that the skewness and kurtosis calculations are correct, specifically that they represent the access values and normalized correctly to the variances if needed - I'm not sure it is needed as we should probably normalize in after the summation.
     # Skewness loop
     idx3 = 0
     for i in range(N):
-        col_i = returns[:, i]
+        col_i = centralized_returns[:, i]
         for j in range(i, N):
-            col_j = returns[:, j]
+            col_j = centralized_returns[:, j]
             # Pre-multiply columns to save time in inner loop
             col_ij = col_i * col_j
             
             for k in range(j, N):
-                col_k = returns[:, k]
+                col_k = centralized_returns[:, k]
                 
                 # Sum over time dimension (The contraction)
                 # sum(r_it * r_jt * r_kt)
@@ -118,17 +126,17 @@ def compute_flat_moments(returns):
     # Kurtosis loop
     idx4 = 0
     for i in range(N):
-        col_i = returns[:, i]
+        col_i = centralized_returns[:, i]
         for j in range(i, N):
-            col_j = returns[:, j]
+            col_j = centralized_returns[:, j]
             col_ij = col_i * col_j
             
             for k in range(j, N):
-                col_k = returns[:, k]
+                col_k = centralized_returns[:, k]
                 col_ijk = col_ij * col_k
                 
                 for l in range(k, N):
-                    col_l = returns[:, l]
+                    col_l = centralized_returns[:, l]
                     
                     # Sum over time dimension
                     val = np.dot(col_ijk, col_l)
@@ -145,3 +153,66 @@ def compute_flat_moments(returns):
     m4_flat *= mult4.astype(np.float64)
                     
     return m1_flat, m2_flat, m3_flat, m4_flat
+
+
+@nb.njit(fastmath=True)
+def compute_flat_moments_gradients(w, m1_flat, m2_flat, m3_flat, m4_flat):
+    """
+    Computes the gradients of the centralized moments of the portfolio DIRECTLY into flattened arrays.
+    Input: w (N), m1_flat (N), m2_flat (N*(N+1)/2), m3_flat (N*(N+1)*(N+2)/6), m4_flat (N*(N+1)*(N+2)*(N+3)/24)
+    Output: grad_m1_flat (N), grad_m2_flat (N), grad_m3_flat (N), grad_m4_flat (N)
+    """
+    N = w.shape[0]
+
+    grad_m1_flat = np.diag(m1_flat)  # Gradient of the first moment (mean)
+    grad_m2_flat = np.zeros((N), dtype=np.float64)
+    grad_m3_flat = np.zeros((N), dtype=np.float64)
+    grad_m4_flat = np.zeros((N), dtype=np.float64)
+
+    # Gradient of the second moment (covariance)
+    idx2 = 0
+    for i in range(N):
+        wi = w[i]
+        for j in range(i, N):
+            mij = m2_flat[idx2]
+            # d/dwi
+            grad_m2_flat[i] += mij * w[j]
+            # d/dwj
+            grad_m2_flat[j] += mij * wi
+            idx2 += 1
+    
+    # Precompute outer product of weights for avoiding redundant calculations
+    w_ij = np.outer(w, w)
+
+    # Gradient of the third moment (skewness)
+    idx3 = 0
+    for i in range(N):
+        for j in range(i, N):
+            for k in range(j, N):
+                mijk = m3_flat[idx3]
+                # d/dwi
+                grad_m3_flat[i] += mijk * w_ij[j, k]
+                # d/dwj
+                grad_m3_flat[j] += mijk * w_ij[i, k]
+                # d/dwk
+                grad_m3_flat[k] += mijk * w_ij[i, j]
+                idx3 += 1
+    
+    # Gradient of the fourth moment (kurtosis)
+    idx4 = 0
+    for i in range(N):
+        for j in range(i, N):
+            for k in range(j, N):
+                for l in range(k, N):
+                    mijkl = m4_flat[idx4]
+                    # d/dwi
+                    grad_m4_flat[i] += mijkl * w_ij[j, k] * w[l]
+                    # d/dwj
+                    grad_m4_flat[j] += mijkl * w_ij[i, k] * w[l]
+                    # d/dwk
+                    grad_m4_flat[k] += mijkl * w_ij[i, j] * w[l]
+                    # d/dwl
+                    grad_m4_flat[l] += mijkl * w_ij[i, j] * w[k]
+                    idx4 += 1
+
+    return grad_m1_flat, grad_m2_flat, grad_m3_flat, grad_m4_flat
