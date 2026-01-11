@@ -38,10 +38,10 @@ Since FIRE is an unconstrained optimization method, I wrap it in a custom Augmen
 Standard methods slowly ramp up penalties. I start with high stiffness to force immediate feasibility ("crash" into the valid region), then relax the penalty parameter (ρ) while refining Lagrange multipliers (λ). I relax the penalty stiffness to stop the solver from wasting time ping-pong between tight constraint walls, allowing it to flow smoothly along the valid path toward the optimum.
 
 ### C. Performance (Numba)
-To make this computationally viable, I avoided Python loops entirely.
+The $O(N^3)$ skewness and $O(N^4)$ kurtosis calculations are the primary bottlenecks. To handle this:
 
-* **JIT Compilation:** All numerical routines are compiled using `numba.jit(nopython=True)`.
-* **Tensor Calculus:** The $O(N^3)$ Skewness and $O(N^4)$ Kurtosis tensor contractions are parallelized, achieving great performance.
+* **No Python Loops:** All core numerical routines are moved into `@njit` functions. This compiles the code to machine instructions, removing Python's execution overhead.
+* **Vectorization:** I structured the tensor contractions to be "vector-friendly." This allows the CPU to use SIMD instructions to process multiple data points at once, which is necessary to keep the gradient calculation fast enough for an iterative solver.
 
 ## 4. Benchmarking Strategy
 TBA

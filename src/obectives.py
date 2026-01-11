@@ -272,10 +272,10 @@ def compute_portfolio_skewness(w, m3_flat, sigma_p):
     for i in range(N):
         wi = w[i]
         for j in range(i, N):
-            wj = w[j]
+            wi_wj = wi * w[j]
             for k in range(j, N):
                 mijk = m3_flat[idx3]
-                skew_p += wi * wj * w[k] * mijk
+                skew_p += wi_wj * w[k] * mijk
                 idx3 += 1
     skew_p /= sigma_p**3
     return skew_p
@@ -294,12 +294,12 @@ def compute_portfolio_kurtosis(w, m4_flat, sigma_p):
     for i in range(N):
         wi = w[i]
         for j in range(i, N):
-            wj = w[j]
+            wi_wj = wi * w[j]
             for k in range(j, N):
-                wk = w[k]
+                wi_wj_wk = wi_wj * w[k]
                 for l in range(k, N):
                     mijkl = m4_flat[idx4]
-                    kurt_p += wi * wj * wk * w[l] * mijkl
+                    kurt_p += wi_wj_wk * w[l] * mijkl
                     idx4 += 1
     kurt_p /= sigma_p**4
     return kurt_p
