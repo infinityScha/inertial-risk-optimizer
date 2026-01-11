@@ -1,6 +1,17 @@
 import numpy as np
 import numba as nb
-from numba import prange
+from scipy.stats import norm
+
+
+def compute_z_alpha(confidence_level):
+    """
+    Computes the z-score for a given confidence level using the inverse CDF of the standard normal distribution.
+    Input: confidence_level (float)
+    Output: z_alpha (float)
+    """
+    z_alpha = norm.ppf(confidence_level)
+    return z_alpha
+
 
 @nb.njit
 def get_multiplicity_2(n):
@@ -164,7 +175,7 @@ def compute_flat_moments_gradients(w, m1_flat, m2_flat, m3_flat, m4_flat):
     """
     N = w.shape[0]
 
-    grad_m1_flat = np.diag(m1_flat)  # Gradient of the first moment (mean)
+    grad_m1_flat = m1_flat.copy()
     grad_m2_flat = np.zeros((N), dtype=np.float64)
     grad_m3_flat = np.zeros((N), dtype=np.float64)
     grad_m4_flat = np.zeros((N), dtype=np.float64)
@@ -310,6 +321,7 @@ def compute_modified_VaR(w, m1_flat, m2_flat, m3_flat, m4_flat, z_alpha):
     kurt_p = compute_portfolio_kurtosis(w, m4_flat, sigma_p)
 
     # Modified VaR calculation
+    # TODO: check if I need to use the -3
     z_mod = (z_alpha +
              (1/6) * (z_alpha**2 - 1) * skew_p +
              (1/24) * (z_alpha**3 - 3*z_alpha) * (kurt_p - 3) -
@@ -318,3 +330,52 @@ def compute_modified_VaR(w, m1_flat, m2_flat, m3_flat, m4_flat, z_alpha):
     modified_VaR = -(mu_p + z_mod * sigma_p)
 
     return modified_VaR
+
+
+@nb.njit(fastmath=True)
+def compute_modified_VaR_gradient(w, m1_flat, m2_flat, m3_flat, m4_flat, z_alpha):
+    """
+    Computes the gradient of the modified VaR of the portfolio using the centralized moments.
+    Input: w (N), m1_flat (N), m2_flat (N*(N+1)/2), m3_flat (N*(N+1)*(N+2)/6), m4_flat (N*(N+1)*(N+2)*(N+3)/24), z_alpha (float)
+    Output: grad_modified_VaR (N)
+    """
+    N = w.shape[0]
+    
+    # compute portfolio mean, variance, skewness, kurtosis
+    sigma2_p = compute_portfolio_variance(w, m2_flat)
+    sigma_p = np.sqrt(sigma2_p)
+    skew_p = compute_portfolio_skewness(w, m3_flat, sigma_p)
+    kurt_p = compute_portfolio_kurtosis(w, m4_flat, sigma_p)
+
+    # compute gradients of moments
+    grad_m1_flat, grad_m2_flat, grad_m3_flat, grad_m4_flat = compute_flat_moments_gradients(w, m1_flat, m2_flat, m3_flat, m4_flat)
+
+    # Precompute common terms for gradient calculation
+    inv_sigma_p = 1.0 / sigma_p
+    inv_sigma2_p = inv_sigma_p * inv_sigma_p
+    inv_sigma3_p = inv_sigma2_p * inv_sigma_p
+    inv_sigma4_p = inv_sigma3_p * inv_sigma_p
+    inv_sigma5_p = inv_sigma4_p * inv_sigma_p
+
+    # Gradient of modified VaR
+    grad_modified_VaR = np.zeros(N, dtype=np.float64)
+
+    z_mod = (z_alpha +
+                (1/6) * (z_alpha**2 - 1) * skew_p +
+                (1/24) * (z_alpha**3 - 3*z_alpha) * (kurt_p - 3) -
+                (1/36) * (2*z_alpha**3 - 5*z_alpha) * skew_p**2)
+
+    # Compute gradient components
+    for i in range(N):
+        dmu_dw = grad_m1_flat[i]
+        dsigma2_dw = grad_m2_flat[i]
+        dsigma_dw = 0.5 * dsigma2_dw * inv_sigma_p
+        dskew_dw = grad_m3_flat[i] * inv_sigma3_p - 3 * skew_p * dsigma_dw * inv_sigma_p
+        dkurt_dw = grad_m4_flat[i] * inv_sigma4_p - 4 * kurt_p * dsigma_dw * inv_sigma_p
+        # todo: check if I need to use the -3
+        dzmod_dw = ((1/6) * (z_alpha**2 - 1) * dskew_dw +
+                    (1/24) * (z_alpha**3 - 3*z_alpha) * dkurt_dw -
+                    (1/18) * (2*z_alpha**3 - 5*z_alpha) * skew_p * dskew_dw)
+        grad_modified_VaR[i] = -(dmu_dw + dzmod_dw * sigma_p + z_mod * dsigma_dw)
+    
+    return grad_modified_VaR
