@@ -115,7 +115,6 @@ def compute_flat_moments(returns):
             m2_flat[idx2] = val * inv_T
             idx2 += 1
 
-    # TODO: validate that the skewness and kurtosis calculations are correct, specifically that they represent the access values and normalized correctly to the variances if needed - I'm not sure it is needed as we should probably normalize in after the summation.
     # Skewness loop
     idx3 = 0
     for i in range(N):
