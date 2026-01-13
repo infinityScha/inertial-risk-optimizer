@@ -63,10 +63,10 @@ Use inside a python script:
 
 ```python
 from src.fire import FireOptimizer
-from src.data import generate_nasty_data
+from src.data import get_snp500_top
 
 # 1. Generate heavy-tailed data
-returns, _, _ = generate_nasty_data(n_assets=50, nu=3.0)
+returns, _, _ = get_blue_chip_returns(years=15, n_assets=50)
 
 # 2. Initialize Solver
 solver = FireOptimizer(returns)

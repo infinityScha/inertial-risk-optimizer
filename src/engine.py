@@ -2,7 +2,7 @@ import numba as nb
 import numpy as np
 
 @nb.njit
-def fire2(x0, f, alpha0=0.25, alphashrink=0.99, tmin=0.02, tmax=10.0, dtgrow=1.1, dtshrink=0.5, delaystep=20, Npmax=2000, initialdelay=True, Nmax=20000, f_tol=1e-6):
+def fire2(x0, f, f_params, alpha0=0.25, alphashrink=0.99, tmin=1.0e-7, tmax=1.0e-1, dtgrow=1.1, dtshrink=0.5, delaystep=20, Npmax=2000, initialdelay=True, Nmax=20000, f_tol=1e-6, break_on_convergence=True):
     """
     A Numba-optimized implementation of the FIRE2.0 (Fast Inertial Relaxation Engine 2.0) algorithm
     for energy minimization in molecular dynamics simulations. Based on the method described in https://doi.org/10.1016/j.commatsci.2020.109584
@@ -11,7 +11,9 @@ def fire2(x0, f, alpha0=0.25, alphashrink=0.99, tmin=0.02, tmax=10.0, dtgrow=1.1
     x0 : array_like
         Initial positions.
     f : callable
-        Forces function that computes forces given positions.
+        Gradient function that computes gradient given positions.
+    f_params : tuple
+        Additional parameters to pass to the gradient function (constants).
     alpha0 : float
         Initial mixing parameter for velocity adjustment.
     alphashrink : float
@@ -34,6 +36,8 @@ def fire2(x0, f, alpha0=0.25, alphashrink=0.99, tmin=0.02, tmax=10.0, dtgrow=1.1
         Maximum number of iterations.
     f_tol : float
         Force tolerance for convergence.
+    break_on_convergence : bool
+        Whether to stop the algorithm upon convergence.
 
     Returns:
     x : array_like
@@ -45,12 +49,12 @@ def fire2(x0, f, alpha0=0.25, alphashrink=0.99, tmin=0.02, tmax=10.0, dtgrow=1.1
     x = x0.copy()
     v = np.zeros_like(x0)
     alpha = alpha0
-    dt = tmin
+    dt = np.sqrt(tmin * tmax) # initial time step, geometric mean
     Np_plus = 0
     Np_minus = 0
     converged = False
 
-    fx = f(x)
+    fx = -f(x, f_params)
     for step in range(Nmax):
         P = np.dot(fx, v)
         if P > 0:
@@ -70,11 +74,13 @@ def fire2(x0, f, alpha0=0.25, alphashrink=0.99, tmin=0.02, tmax=10.0, dtgrow=1.1
             x -= 0.5 * v * dt
             v[:] = 0.0
         # integration step, semi-implicit Euler (https://doi.org/10.1016/j.commatsci.2018.09.049)
+        v += fx * dt
         x += v * dt
-        fx = f(x)
+        fx = -f(x, f_params)
         norm_fx = np.linalg.norm(fx)
         if norm_fx < f_tol:
             converged = True
-            break
+            if break_on_convergence:
+                break
         v = (1 - alpha) * v + alpha * fx / norm_fx * np.linalg.norm(v)
     return x, converged

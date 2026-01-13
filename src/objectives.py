@@ -93,7 +93,7 @@ def compute_flat_moments(returns):
 
     # mean loop
     for i in range(N):
-        col_i = returns[:, i]
+        col_i = np.ascontiguousarray(returns[:, i])
         val = np.sum(col_i)  # sum over time dimension
         m1_flat[i] = val * inv_T
 
@@ -106,9 +106,9 @@ def compute_flat_moments(returns):
     # Covariance loop
     idx2 = 0
     for i in range(N):
-        col_i = centralized_returns[:, i]
+        col_i = np.ascontiguousarray(centralized_returns[:, i])
         for j in range(i, N):
-            col_j = centralized_returns[:, j]
+            col_j = np.ascontiguousarray(centralized_returns[:, j])
             # Sum over time dimension (The contraction)
             # sum(r_it * r_jt)
             val = np.dot(col_i, col_j)
@@ -118,14 +118,14 @@ def compute_flat_moments(returns):
     # Skewness loop
     idx3 = 0
     for i in range(N):
-        col_i = centralized_returns[:, i]
+        col_i = np.ascontiguousarray(centralized_returns[:, i])
         for j in range(i, N):
-            col_j = centralized_returns[:, j]
+            col_j = np.ascontiguousarray(centralized_returns[:, j])
             # Pre-multiply columns to save time in inner loop
             col_ij = col_i * col_j
             
             for k in range(j, N):
-                col_k = centralized_returns[:, k]
+                col_k = np.ascontiguousarray(centralized_returns[:, k])
                 
                 # Sum over time dimension (The contraction)
                 # sum(r_it * r_jt * r_kt)
@@ -136,17 +136,17 @@ def compute_flat_moments(returns):
     # Kurtosis loop
     idx4 = 0
     for i in range(N):
-        col_i = centralized_returns[:, i]
+        col_i = np.ascontiguousarray(centralized_returns[:, i])
         for j in range(i, N):
-            col_j = centralized_returns[:, j]
+            col_j = np.ascontiguousarray(centralized_returns[:, j])
             col_ij = col_i * col_j
             
             for k in range(j, N):
-                col_k = centralized_returns[:, k]
+                col_k = np.ascontiguousarray(centralized_returns[:, k])
                 col_ijk = col_ij * col_k
                 
                 for l in range(k, N):
-                    col_l = centralized_returns[:, l]
+                    col_l = np.ascontiguousarray(centralized_returns[:, l])
                     
                     # Sum over time dimension
                     val = np.dot(col_ijk, col_l)
