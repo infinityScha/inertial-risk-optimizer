@@ -10,7 +10,7 @@ class FireOptimizer():
     for energy minimization in molecular dynamics simulations. Based on the method described in https://doi.org/10.1016/j.commatsci.2020.109584
     """
 
-    def __init__(self, returns, long_only = True, rho1=10.0, rho2=10.0, f_tol=1e-6, c_tol=1e-6, verbose=False, max_outer_iterations=1e6):
+    def __init__(self, returns, long_only = True, rho1=1.0e-1, rho2=1.0e-3, f_tol=1e-6, c_tol=1e-6, verbose=False, max_outer_iterations=1e6):
         if returns is None:
             raise ValueError("Returns data must be provided for optimization.")
         self.long_only = long_only
@@ -44,11 +44,11 @@ class FireOptimizer():
                                 self.rho1, lam1,
                                 self.rho2, lams2)
 
-                # Run the FIRE inner loop (1000 steps)
-                w, converged = fire2(w, compute_lagrangian_gradient, param_tuple, Nmax=1000, f_tol=self.f_tol, break_on_convergence=False)
+                # Run the FIRE inner loop (10000 steps tops, should converge earlier)
+                w, converged = fire2(w, compute_lagrangian_gradient, param_tuple, Nmax=1000000, f_tol=self.f_tol)
                 
                 # Check constraints, if satisfied accept convergence
-                converged = converged and self._check_constraints(w) 
+                converged = converged and self._check_feasibility(w, lams2) 
                 
                 if converged:
                     break
@@ -60,8 +60,10 @@ class FireOptimizer():
                 grad_norm = np.linalg.norm(compute_lagrangian_gradient(w, param_tuple))
                 lagrangian_value = compute_lagrangian(w, param_tuple)
                 unity_violation = compute_abs_unity_constraint(w)
-                positivity_violation = np.sum(compute_abs_positivity_constraint(w)) if self.long_only else 0.0
-                pbar.set_description(f"FIRE [G_norm: {grad_norm:.2e} | Lagrangian: {lagrangian_value:.2e} | Unity_Viol: {unity_violation:.2e} | Positivity_Viol: {positivity_violation:.2e}]")
+                mVaR = compute_modified_VaR(w, self.m1_flat, self.m2_flat, self.m3_flat, self.m4_flat, z_alpha)
+                sigma_ineq = np.maximum(-w, -lams2 / self.rho2)
+                max_ineq_violation = np.max(np.abs(sigma_ineq))
+                pbar.set_description(f"FIRE [G_norm: {grad_norm:.2e} | Lagrangian: {lagrangian_value:.2e} | mVaR: {mVaR:.2e} | Unity_Viol: {unity_violation:.2e} | Positivity_Viol: {max_ineq_violation:.2e}]")
                 pbar.update(1)
                 
                 counter += 1
@@ -76,30 +78,28 @@ class FireOptimizer():
     def _update_lagrange_multipliers(self, w, rho1, lam1, rho2, lams2):
         """
         Updates Lagrange multipliers based on current weights.
+        See https://epubs.siam.org/doi/10.1137/060654797 for details.
         Input: w (array), rho1 (float), lam1 (float), rho2 (float), lams2 (array)
         """
-        s = np.sum(w) - 1.0
-        updated_lam1 = lam1 + rho1 * s
-
-        neg_mark = w < 0.0
-        neg_w = np.where(neg_mark, w, 0.0)
-        updated_lams2 = lams2.copy()
-        for i in range(len(w)):
-            if neg_mark[i]:
-                updated_lams2[i] += rho2 * neg_w[i]
-
-        # TODO: add reduction in rhos
+        updated_lam1 = lam1 + rho1 * (np.sum(w) - 1.0)
+        updated_lams2 = np.maximum(0.0, lams2 + rho2 * (-w)) if self.long_only else lams2
+        
         return updated_lam1, updated_lams2
     
-    def _check_constraints(self, w):
+    def _check_feasibility(self, w, lams2):
         """
-        Checks constraint violations.
+        Checks if the solution is feasible and complementary slackness conditions are met (within tolerance).
+        See https://epubs.siam.org/doi/10.1137/060654797 for details.
         Input: w (array)
         Output: tuple (unity_violation (float), positivity_violation (float))
         """
-        unity_violation = compute_abs_unity_constraint(w)
-        total_violation = unity_violation
-        if self.long_only:
-            positivity_violation = np.sum(compute_abs_positivity_constraint(w))
-            total_violation += positivity_violation
-        return (0.5*total_violation) < self.c_tol
+        unity_violation = abs(np.sum(w) - 1.0)
+
+        if not self.long_only:
+            return unity_violation < self.c_tol
+        
+        sigma_ineq = np.maximum(-w, -lams2 / self.rho2)
+
+        max_ineq_violation = np.max(np.abs(sigma_ineq))
+
+        return (unity_violation < self.c_tol) and (max_ineq_violation < self.c_tol)

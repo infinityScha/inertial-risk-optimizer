@@ -9,7 +9,7 @@ def compute_z_alpha(confidence_level):
     Input: confidence_level (float)
     Output: z_alpha (float)
     """
-    z_alpha = norm.ppf(confidence_level)
+    z_alpha = norm.ppf(1-confidence_level)
     return z_alpha
 
 

@@ -49,27 +49,22 @@ def compute_abs_positivity_constraint(w):
 
 @nb.njit
 def compute_positivity_constraint(w, rho2, lams2):
-    """
-    Computes constraint for weights to be non-negative.
-    Input: w (array), rho2 (float), lams2 (array)
-    Output: penalty value (float)
-    """
-    neg_w = np.minimum(w, 0.0)
-    sum_neg2 = np.sum(neg_w*neg_w)
-    return 0.5 * rho2 * sum_neg2 + np.dot(lams2, neg_w)
+    shifted_violation = -w + (lams2 / rho2)
+    shifted_violation = shifted_violation[shifted_violation > 0.0]
+    
+    return 0.5 * rho2 * np.sum(shifted_violation**2)
 
 
 @nb.njit
 def compute_positivity_constraint_gradient(w, rho2, lams2):
-    """
-    Computes gradient of the positivity constraint with respect to weights.
-    Input: w (array), rho2 (float), lams2 (array)
-    Output: gradient array
-    """
-    neg_mark = w < 0.0
-    neg_w = np.where(neg_mark, w, 0.0)
-    rel_lams2 = np.where(neg_mark, lams2, 0.0)
-    return rho2 * neg_w + rel_lams2
+    shifted_violation = -w + (lams2 / rho2)
+
+    grad = np.zeros_like(w)
+    for i in range(len(w)):
+        if shifted_violation[i] > 0.0:
+            grad[i] = rho2 * w[i] - lams2[i]
+    
+    return grad
 
 
 @nb.njit

@@ -11,8 +11,8 @@ def get_blue_chip_returns(years=15, n_assets=50):
         n_assets (int): Number of assets to return (sorted by market cap).
         
     Returns:
+        List: List of ticker symbols.
         np.ndarray: Cleaned return matrix (T x N).
-        list: Ticker symbols.
     """
     # hardcoded list of major players with long histories.
     tickers = [
@@ -40,7 +40,7 @@ def get_blue_chip_returns(years=15, n_assets=50):
     df = df.ffill().dropna()
 
     returns = np.log(df / df.shift(1)).dropna()
-    return returns.values
+    return returns.columns.tolist(), returns.values
 
 
 def get_random_returns_from_cov(cov_matrix, years=15):
