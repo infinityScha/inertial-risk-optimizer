@@ -1,8 +1,8 @@
 # Anharmonic Portfolio Optimization: The FIRE2 Engine
 
-This project applies the FIRE2 (Fast Inertial Relaxation Engine 2) algorithm—conventionally used in computational physics for atomic structure relaxation—to the problem of non-convex portfolio optimization.
+This project applies the FIRE2 (Fast Inertial Relaxation Engine 2) algorithm—a structural relaxation tool from computational physics—to the problem of portfolio optimization using higher-order risk moments.
 
-While I initially built this to escape local minima in "rugged" landscapes, I discovered that at the limit of 1% VaR, the market becomes relatively "predictable." Because assets tend to crash together, the problem collapses from 45 variables to effectively 5, making the surface nearly convex. Standard solvers like SLSQP perform just as well as FIRE2 in this regime and are 1000x faster, but the high-quality gradient engine developed here remains the "top notch" backbone for the optimization. As most of the development time involved writing increasingly optimized code for the gradient, I am still quite pleased with the outcome.
+The Reality Check: Initially, I built this to navigate "rugged" non-convex landscapes. However, empirical testing at the 1% VaR limit shows that systemic market correlation effectively collapses the dimensionality of the problem (e.g., from 45 variables to 5). In this regime, the surface becomes effectively convex. While FIRE2 reaches the same minima as SLSQP, it is roughly x1000 slower. SLSQP’s second-order approximation (BFGS) allows it to take massive jumps that a damped physical simulation simply cannot match. The true "top-notch" success of this project is the Numba-accelerated gradient engine required to compute the O(N4) tensors efficiently enough for any solver to function.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![Numba](https://img.shields.io/badge/HPC-Numba-green)
