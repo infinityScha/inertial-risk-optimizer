@@ -10,7 +10,7 @@ class FireOptimizer():
     for energy minimization in molecular dynamics simulations. Based on the method described in https://doi.org/10.1016/j.commatsci.2020.109584
     """
 
-    def __init__(self, returns, long_only = True, rho1=1.0e-1, rho2=1.0e-3, f_tol=1e-6, c_tol=1e-6, verbose=False, max_outer_iterations=1e6):
+    def __init__(self, returns, long_only = True, rho1=0.5, rho2=4.0, f_tol=1e-6, c_tol=1e-6, verbose=False, max_outer_iterations=1e6):
         if returns is None:
             raise ValueError("Returns data must be provided for optimization.")
         self.long_only = long_only
@@ -27,7 +27,8 @@ class FireOptimizer():
 
     def optimize(self, confidence=0.99, x0=None):
         if x0 is None:
-            x0 = np.random.rand(self.m1_flat.shape[0])
+            # exponential distribution ensures a uniform distribution over the simplex
+            x0 = np.random.exponential(1.0, size=self.m1_flat.shape[0])
             x0 /= np.sum(x0)
 
         z_alpha = compute_z_alpha(confidence)
@@ -72,7 +73,8 @@ class FireOptimizer():
                     raise RuntimeError("FIRE Optimizer did not converge within the maximum number of outer iterations.")
         
         mVaR = compute_modified_VaR(w, self.m1_flat, self.m2_flat, self.m3_flat, self.m4_flat, z_alpha)
-        print(f"Optimization converged in {counter} outer iterations. Minimal mVaR: {mVaR}")
+        if self.verbose:
+            print(f"Optimization converged in {counter} outer iterations. Minimal mVaR: {mVaR}")
         return w
         
     def _update_lagrange_multipliers(self, w, rho1, lam1, rho2, lams2):

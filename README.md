@@ -1,14 +1,15 @@
 # Anharmonic Portfolio Optimization: The FIRE2 Engine
 
 This project applies the FIRE2 (Fast Inertial Relaxation Engine 2) algorithm—conventionally used in computational physics for atomic structure relaxation—to the problem of non-convex portfolio optimization.
-Standard solvers (like SLSQP) often struggle with the "rugged" error landscapes created by heavy-tailed market data. I built a custom engine that combines inertial dynamics with an Aggressive Augmented Lagrangian method. This allows the solver to escape local minima while strictly enforcing portfolio constraints, offering a better alternative to traditional gradient-based methods.
+
+While I initially built this to escape local minima in "rugged" landscapes, I discovered that at the limit of 1% VaR, the market becomes relatively "predictable." Because assets tend to crash together, the problem collapses from 45 variables to effectively 5, making the surface nearly convex. Standard solvers like SLSQP perform just as well as FIRE2 in this regime and are 1000x faster, but the high-quality gradient engine developed here remains the "top notch" backbone for the optimization. As most of the development time involved writing increasingly optimized code for the gradient, I am still quite pleased with the outcome.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![Numba](https://img.shields.io/badge/HPC-Numba-green)
 
 ## 1. The Core Problem
 Modern Portfolio Theory often assumes Gaussian returns, making risk minimization a simple convex problem (Variance). However, real markets exhibit Skewness and Kurtosis.
-When optimizing for Modified Value-at-Risk (mVaR) using the Cornish-Fisher expansion, the objective function includes cubic and quartic terms. This creates a non-convex surface where greedy solvers like `scipy.optimize.SLSQP` frequently get trapped in suboptimal local minima.
+When optimizing for Modified Value-at-Risk (mVaR) using the Cornish-Fisher expansion, the objective function includes cubic and quartic terms. My assumption was that this creates a non-convex surface where greedy solvers like scipy.optimize.SLSQP frequently get trapped in suboptimal local minima. However, the systemic nature of market crashes simplifies the landscape, allowing gradient-based methods to converge efficiently - provided the gradients themselves are precise.
 
 ## 2. Background & Motivation
 During my PhD in Computational Biophysics, I built continuum elastic models to simulate biological membranes. These systems find equilibrium by minimizing complex bending energy functionals, resulting sometimes in rugged landscapes.
@@ -28,14 +29,11 @@ I implemented a custom solver based on Newtonian dynamics. The system has "mass"
 * **Inertia:** Momentum helps the solver "fly over" small ripples in the objective function that would trap a standard gradient descent algorithm.
 * **Adaptive Time-Step:** The engine dynamically adjusts Δt. It accelerates when moving downhill and instantly freezes/resets velocity when moving against the gradient.
 
-### B. The Constraints: Aggressive Augmented Lagrangian
-Since FIRE is an unconstrained optimization method, I wrap it in a custom Augmented Lagrangian framework to enforce:
+### B. The Constraints: Augmented Lagrangian
+Since FIRE is an unconstrained optimization method, I wrap it in an Augmented Lagrangian framework to enforce:
 
 * Unity Constraint: $\sum w_i = 1$
 * (optional) Long-only Constraint: $w_i \ge 0$
-
-**Why "Aggressive"?**
-Standard methods slowly ramp up penalties. I start with high stiffness to force immediate feasibility ("crash" into the valid region), then relax the penalty parameter (ρ) while refining Lagrange multipliers (λ). I relax the penalty stiffness to stop the solver from wasting time ping-pong between tight constraint walls, allowing it to flow smoothly along the valid path toward the optimum.
 
 ### C. Performance (Numba)
 The $O(N^3)$ skewness and $O(N^4)$ kurtosis calculations are the primary bottlenecks. To handle this:
@@ -43,8 +41,14 @@ The $O(N^3)$ skewness and $O(N^4)$ kurtosis calculations are the primary bottlen
 * **No Python Loops:** All core numerical routines are moved into `@njit` functions. This compiles the code to machine instructions, removing Python's execution overhead.
 * **Vectorization:** I structured the tensor contractions to be "vector-friendly." This allows the CPU to use SIMD instructions to process multiple data points at once, which is necessary to keep the gradient calculation fast enough for an iterative solver.
 
-## 4. Benchmarking Strategy
-TBA
+## 4. Observations & Benchmarking
+
+compared the converged portfolios of multiple (N>1000) runs from random initial portfolios for a set of 45 large firms from the S&P 500, using returns from the volatile 2007–2009 period.
+
+Key Findings:
+
+* Both SLSQP and FIRE2 converged to the same results.
+* SLSQP is significantly faster (~$x1000$) for this specific use case because the 1% VaR landscape is effectively convex.
 
 ## 5. Installation & Usage
 

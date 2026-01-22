@@ -2,19 +2,21 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
-def get_blue_chip_returns(years=15, n_assets=50):
+def get_blue_chip_returns(n_assets=50, start_date=None, end_date=None, years=None):
     """
     Fetches historical daily log returns for top S&P 500 components.
+    Priority: start_date takes precedence over years.
     
     Args:
-        years (int): Number of years of history.
-        n_assets (int): Number of assets to return (sorted by market cap).
+        n_assets (int): Number of assets to return.
+        start_date (str/Timestamp): Optional start date.
+        end_date (str/Timestamp): Optional end date. Defaults to today.
+        years (int): Number of years to look back if start_date is None.
         
     Returns:
         List: List of ticker symbols.
         np.ndarray: Cleaned return matrix (T x N).
     """
-    # hardcoded list of major players with long histories.
     tickers = [
         "AAPL", "MSFT", "GOOGL", "AMZN", "BRK-B", "JPM", "V", "JNJ", "WMT", "PG",
         "MA", "XOM", "CVX", "HD", "KO", "PEP", "BAC", "PFE", "ABBV", "COST",
@@ -23,42 +25,39 @@ def get_blue_chip_returns(years=15, n_assets=50):
         "CAT", "IBM", "DE", "GE", "MMM", "GS", "SPGI", "BLK", "NOW", "RTX"
     ][:n_assets]
 
-    end_date = pd.Timestamp.now()
-    start_date = end_date - pd.DateOffset(years=years)
+    # 1. Handle end_date
+    if end_date is None:
+        end_dt = pd.Timestamp.now()
+    else:
+        end_dt = pd.to_datetime(end_date)
 
-    # Use auto_adjust=True to get 'Close' which will be the adjusted close
-    data = yf.download(tickers, start=start_date, end=end_date, auto_adjust=True)
+    # 2. Handle start_date / years logic
+    if start_date is not None:
+        start_dt = pd.to_datetime(start_date)
+    elif years is not None:
+        start_dt = end_dt - pd.DateOffset(years=years)
+    else:
+        # Fallback default
+        start_dt = end_dt - pd.DateOffset(years=30)
+
+    print(f"Fetching data from {start_dt.date()} to {end_dt.date()}...")
+
+    # auto_adjust=True handles splits/dividends
+    data = yf.download(tickers, start=start_dt, end=end_dt, auto_adjust=True)
     
-    # Access 'Close' instead of 'Adj Close'
     if 'Close' in data.columns:
         df = data['Close']
     else:
-        # Fallback for single-ticker edge cases or different structures
         df = data
 
-    df = df.dropna(axis=1, thresh=int(len(df) * 0.9)) 
+    # Clean data
+    # Drop assets missing > 5% of data to ensure we keep those active during the GFC
+    df = df.dropna(axis=1, thresh=int(len(df) * 0.95)) 
     df = df.ffill().dropna()
 
     returns = np.log(df / df.shift(1)).dropna()
-    return returns.columns.tolist(), returns.values
-
-
-def get_random_returns_from_cov(cov_matrix, years=15):
-    """
-    Generates synthetic daily log returns from a given covariance matrix.
     
-    Args:
-        cov_matrix (np.ndarray): Covariance matrix (N x N).
-        years (int): Number of years of history.
-    Returns:
-        np.ndarray: Simulated return matrix (T x N).
-    """
-    n_assets = cov_matrix.shape[0]
-    trading_days_per_year = 252
-    total_days = years * trading_days_per_year
-
-    # Generate random returns
-    mean_returns = np.zeros(n_assets)
-    returns = np.random.multivariate_normal(mean_returns, cov_matrix, size=total_days)
-
-    return returns
+    actual_tickers = returns.columns.tolist()
+    print(f"Final asset count: {len(actual_tickers)}")
+    
+    return actual_tickers, returns.values
