@@ -2,7 +2,7 @@
 
 This project applies the FIRE2 (Fast Inertial Relaxation Engine 2) algorithm—a structural relaxation tool from computational physics—to the problem of portfolio optimization using higher-order risk moments.
 
-The Reality Check: Initially, I built this to navigate "rugged" non-convex landscapes. However, empirical testing at the 1% VaR limit shows that systemic market correlation effectively collapses the dimensionality of the problem (e.g., from 45 variables to 5). In this regime, the surface becomes effectively convex. While FIRE2 reaches the same minima as SLSQP, it is roughly x1000 slower. SLSQP’s second-order approximation (BFGS) allows it to take massive jumps that a damped physical simulation simply cannot match. The true "top-notch" success of this project is the Numba-accelerated gradient engine required to compute the O(N4) tensors efficiently enough for any solver to function.
+The Reality Check: Initially, I built this to navigate "rugged" non-convex landscapes. However, empirical testing at the 1% VaR limit shows that systemic market correlation effectively collapses the dimensionality of the problem (e.g., from 45 variables to 5). In this regime, the surface becomes effectively convex. While FIRE2 reaches the same minima as SLSQP, it is roughly x100 slower. SLSQP’s second-order approximation (BFGS) allows it to take massive jumps that a damped physical simulation simply cannot match. The true "top-notch" success of this project is the Numba-accelerated gradient engine required to compute the O(N4) tensors efficiently enough for any solver to function.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![Numba](https://img.shields.io/badge/HPC-Numba-green)
@@ -48,7 +48,7 @@ compared the converged portfolios of multiple (N>1000) runs from random initial 
 Key Findings:
 
 * Both SLSQP and FIRE2 converged to the same results.
-* SLSQP is significantly faster (~$x1000$) for this specific use case because the 1% VaR landscape is effectively convex.
+* SLSQP is significantly faster (~$x100$) for this specific use case because the 1% VaR landscape is effectively convex.
 
 ## 5. Installation & Usage
 
