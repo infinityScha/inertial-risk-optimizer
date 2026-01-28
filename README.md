@@ -43,7 +43,7 @@ The $O(N^3)$ skewness and $O(N^4)$ kurtosis calculations are the primary bottlen
 
 ## 4. Observations & Benchmarking
 
-compared the converged portfolios of multiple (N>1000) runs from random initial portfolios for a set of 45 large firms from the S&P 500, using returns from the volatile 2007–2009 period.
+I compared the converged portfolios of multiple (N>1000) runs from random initial portfolios for a set of 45 large firms from the S&P 500, using returns from the volatile 2007–2009 period.
 
 Key Findings:
 
